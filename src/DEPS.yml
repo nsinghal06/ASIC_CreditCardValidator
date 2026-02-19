@@ -1,0 +1,8 @@
+# DEPS configuration for Luhn Validator project
+
+# Luhn validator testbench simulation
+luhn_tb:
+  deps:
+    - luhn_validator.sv
+    - tb_luhn_validator.sv
+  top: tb_luhn_validator
