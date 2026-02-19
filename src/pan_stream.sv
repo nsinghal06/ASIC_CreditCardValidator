@@ -12,44 +12,42 @@
 // - error_flag if protocol is weird (e.g., end without digit_valid)
 
 module pan_stream #(
-    parameter int MIN_LEN   = 13,
-    parameter int MAX_LEN   = 19,
-    parameter int IIN_DIGITS = 6    // capture first 6 digits 
+    parameter integer MIN_LEN    = 13,
+    parameter integer MAX_LEN    = 19,
+    parameter integer IIN_DIGITS = 6
 ) (
     input  logic        clk,
     input  logic        rst_n,
 
-    // Host inputs
-    input  logic        start,        // 1-cycle pulse: begin new card
-    input  logic        pan_end,          // 1-cycle pulse: last digit has been sent
+    input  logic        start,
+    input  logic        pan_end,
     input  logic        digit_valid,
-    input  logic [3:0]  digit_in,     //actual digit/bit value being streamed in
-    input  logic        abort,        // optional: cancel card (can tie low)
+    input  logic [3:0]  digit_in,
+    input  logic        abort,
 
-    // Stream outputs (to Luhn)
-    output logic [3:0]  s_digit, //actual digit/bit value being streamed onward
-    output logic        s_valid, //high when module is accepting digits
-    output logic        s_first,       // pulse on first accepted digit
-    output logic        s_last,        // pulse on last accepted digit
+    output logic [3:0]  s_digit,
+    output logic        s_valid,
+    output logic        s_first,
+    output logic        s_last,
 
-    // Length outputs (how many have been recieved/acceptable)
-    output logic [4:0]  len_count,     // running count
-    output logic [4:0]  len_final,     // how many numbers counter between 13 - 19
-    output logic        len_parity,    // parity of final length odd or even: needed for luhn alogrithm
-    output logic        length_ok,     // valid length range?
+    output logic [4:0]  len_count,
+    output logic [4:0]  len_final,
+    output logic        len_parity,
+    output logic        length_ok,
 
-    // IIN capture (to issuer lookup)
-    output logic [31:0] iin_prefix,            // 8 digits packed as nibbles
-    output logic [3:0]  iin_digits_captured,   // 0..8
-    output logic        iin_ready,             // high once enough digits captured
+    output logic [31:0] iin_prefix,
+    output logic [3:0]  iin_digits_captured,
+    output logic        iin_ready,
 
-    // Framing / status
     output logic        in_progress,
-    output logic        card_done,     // 1-cycle pulse when card finishes
-    output logic        digit_ok,      // sticky: all digits were 0..9
-    output logic        error_flag     // sticky: protocol / invalid digit errors
+    output logic        card_done,
+    output logic        digit_ok,
+    output logic        error_flag
 );
 
+    localparam logic [4:0] MIN_LEN5    = MIN_LEN;
+    localparam logic [4:0] MAX_LEN5    = MAX_LEN;
+    localparam logic [3:0] IIN_DIGITS4 = IIN_DIGITS;
     // Accept digits only while in_progress
     //logic replaces reg/wire: is simpler because can be used in alwyas block 
     logic accept_digit;
@@ -127,7 +125,7 @@ module pan_stream #(
                 len_count <= len_count + 5'd1;
 
                 // Capture first IIN_DIGITS digits into iin_prefix
-                if (iin_digits_captured < IIN_DIGITS[3:0]) begin
+                if (iin_digits_captured < IIN_DIGITS4) begin
                     iin_prefix <= (iin_prefix & ~(32'hF << (4*iin_digits_captured))) |
                                   ({28'd0, digit_in} << (4*iin_digits_captured));
                     iin_digits_captured <= iin_digits_captured + 4'd1;
@@ -161,7 +159,7 @@ module pan_stream #(
     // Derived outputs
     always_comb begin
         len_parity = len_final[0];
-        length_ok  = (len_final >= MIN_LEN[4:0]) && (len_final <= MAX_LEN[4:0]);
+        length_ok  = (len_final >= MIN_LEN5) && (len_final <= MAX_LEN5);
     end
 
 endmodule
