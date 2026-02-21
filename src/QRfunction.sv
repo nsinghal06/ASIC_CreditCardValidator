@@ -49,3 +49,4 @@ module quarter_round (
     assign d_out = d3;
 
 endmodule
+
