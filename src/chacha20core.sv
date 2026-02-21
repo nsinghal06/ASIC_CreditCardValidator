@@ -1,4 +1,5 @@
 `default_nettype none
+//math behind pan encryption
 
 module chacha20core (
     input  logic        clk,

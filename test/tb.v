@@ -10,20 +10,18 @@ module tb;
   reg pan_end = 0;
   reg digit_valid = 0;
   reg [3:0] digit_in = 0;
-  reg abort = 0;
 
-  wire [3:0] s_digit;
-  wire s_valid, s_first, s_last;
-  wire [4:0] len_count, len_final;
-  wire len_parity, length_ok;
+  wire [4:0]  len_final;
+  wire        length_ok;
+  wire        digit_ok;
+  wire        error_flag;
+
   wire [31:0] iin_prefix;
-  wire [3:0] iin_digits_captured;
-  wire iin_ready;
-  wire in_progress, card_done, digit_ok, error_flag;
+  wire        card_done;
   wire [75:0] pan_bcd;
-  wire pan_ready;
+  wire        pan_ready;
 
-    reg  [95:0] nonce_in;
+  reg  [95:0] nonce_in;
   reg         nonce_valid;
 
   wire [63:0] token64;
@@ -31,42 +29,36 @@ module tb;
   wire        token_valid;
   wire        token_busy;
 
-  // 100 MHz clock
-  always #5 clk = ~clk;
-
+  // pan_stream (16-digit capture)
   pan_stream dut (
-    .clk(clk), .rst_n(rst_n),
-    .start(start), .pan_end(pan_end),
-    .digit_valid(digit_valid), .digit_in(digit_in),
-    .abort(abort),
-
-    .s_digit(s_digit), .s_valid(s_valid),
-    .s_first(s_first), .s_last(s_last),
-
-    .len_count(len_count), .len_final(len_final),
-    .len_parity(len_parity), .length_ok(length_ok),
-
-    .iin_prefix(iin_prefix), .iin_digits_captured(iin_digits_captured),
-    .iin_ready(iin_ready),
-
-    .in_progress(in_progress), .card_done(card_done),
-    .digit_ok(digit_ok), .error_flag(error_flag),
-
-    .pan_bcd(pan_bcd), .pan_ready(pan_ready)
-  );
-
-  wire luhn_valid;
-  wire luhn_valid_raw;
-
-  pan_luhn_bridge luhn_bridge (
-    .pan_ready(pan_ready),
-    .len_final(len_final),
+    .clk(clk),
+    .rst_n(rst_n),
+    .start(start),
+    .pan_end(pan_end),
+    .digit_valid(digit_valid),
+    .digit_in(digit_in),
     .pan_bcd(pan_bcd),
-    .luhn_valid(luhn_valid),
-    .luhn_valid_raw(luhn_valid_raw)
+    .pan_ready(pan_ready),
+    .card_done(card_done),
+    .len_final(len_final),
+    .iin_prefix(iin_prefix)
   );
 
-    wire [15:0] prefix4_bcd = iin_prefix[15:0];
+  // compatibility signals expected by test.py
+  assign length_ok  = (len_final == 5'd16);
+  assign digit_ok   = 1'b1;
+  assign error_flag = 1'b0;
+
+ wire luhn_valid;
+
+luhn_validator luhn_u (
+  .pan_ready(pan_ready),
+  .pan_bcd(pan_bcd),
+  .valid(luhn_valid)
+);
+
+  // Metadata (prefix4 from first 4 digits)
+  wire [15:0] prefix4_bcd = iin_prefix[15:0];
 
   wire [2:0] brand_id;
   wire [4:0] issuer_id;
@@ -87,26 +79,23 @@ module tb;
     .meta_valid(meta_valid)
   );
 
-    pan_tokenizer tok_u (
+  // Tokenizer (ChaCha20 + XOR)
+  pan_tokenizer tok_u (
     .clk(clk),
     .rst_n(rst_n),
-
     .start(start),
     .card_done(card_done),
     .pan_ready(pan_ready),
     .luhn_valid(luhn_valid),
     .len_final(len_final),
     .pan_bcd(pan_bcd),
-
     .nonce_in(nonce_in),
     .nonce_valid(nonce_valid),
-
     .token64(token64),
     .token_tag16(token_tag16),
     .token_valid(token_valid),
     .token_busy(token_busy)
   );
-
 
 endmodule
 

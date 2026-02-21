@@ -1,6 +1,6 @@
 `default_nettype none
 
-module pan_tokenizer (
+module pan_encryptor (
     input  logic        clk,
     input  logic        rst_n,
 
@@ -12,9 +12,9 @@ module pan_tokenizer (
     input  logic [4:0]  len_final,    // final length
     input  logic [75:0] pan_bcd,      // digit0 in [3:0], digit1 in [7:4], ... up to 19 digits
 
-    // Nonce inputs (for demo). You can change this later.
+    // Nonce inputs. You can change this later.
     input  logic [95:0] nonce_in,
-    input  logic        nonce_valid,  // pulse if you want to load a new nonce; optional
+    input  logic        nonce_valid,  // pulse if you want to load a new nonce
 
     // Outputs
     output logic [63:0] token64,      // internal token (useful in sim)

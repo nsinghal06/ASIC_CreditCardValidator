@@ -100,7 +100,7 @@ async def pan_stream_plus_meta_and_token(dut):
     dut.pan_end.value = 0
     dut.digit_valid.value = 0
     dut.digit_in.value = 0
-    dut.abort.value = 0
+    #dut.abort.value = 0
 
     # If tokenizer signals exist, init them too (safe)
     if hasattr(dut, "nonce_in"):

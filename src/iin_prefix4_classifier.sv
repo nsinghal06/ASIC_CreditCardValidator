@@ -18,7 +18,7 @@ module iin_prefix4_classifier (
     output logic        meta_valid
 );
 
-    // ---------- ID encoding ----------
+    //  ID encoding 
     localparam logic [2:0] BRAND_UNKNOWN = 3'd0;
     localparam logic [2:0] BRAND_VISA    = 3'd1;
     localparam logic [2:0] BRAND_MC      = 3'd2;
