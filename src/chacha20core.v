@@ -1,33 +1,33 @@
-module chacha20core(resetn, clk, nonce, cipher, done)
+module chacha20core(resetn, clk, nonce, cipher, ready, enable)
 
     input [95:0] nonce; 
     input clk, resetn, enable;
     output logic [511:0] cipher; 
-    output done;
+    output reg ready;
 
     logic [31:0] state [0:15]; //state matrix
 
+    initial begin
     //cha cha 20 fixed constants
-    assign state[0] = 0x61707865;
-    assign state[1] = 0x3320646e;
-    assign state[2] = 0x79622d32;
-    assign state[3] = 0x6b206574;
-
+    state[0] = 32'h61707865;
+    state[1] = 32'h3320646e;
+    state[2] = 32'h79622d32;
+    state[3] = 32'h6b206574;
     //masterkey
-    assign state[4] = 0xf9d7e836;
-    assign state[5] = 0x5065c10a;
-    assign state[6] = 0x784bde64;
-    assign state[7] = 0xa57b0853;
-    assign state[8] = 0xae7c8013;
-    assign state[9] = 0x1b75c64d;
-    assign state[10] = 0xb42931dd;
-    assign state[11] = 0x9df6b36f;
-
+    state[4] = 32'hf9d7e836;
+    state[5] = 32'h5065c10a;
+    state[6] = 32'h784bde64;
+    state[7] = 32'ha57b0853;
+    state[8] = 32'hae7c8013;
+    state[9] = 32'h1b75c64d;
+    state[10] = 32'hb42931dd;
+    state[11] = 32'h9df6b36f;
     //counter + nonce
-    assign state[12] = 0; 
-    assign state[13] = nonce[95:64];
-    assign state[14] = nonce[63:32];
-    assign state[15] = nonce[31:0];
+    state[12] = 0; 
+    state[13] = nonce[95:64];
+    state[14] = nonce[63:32];
+    state[15] = nonce[31:0];
+    end
 
     //quarter round inputs
     wire [31:0] qr0_a_in, qr0_b_in, qr0_c_in, qr0_d_in;
@@ -73,9 +73,9 @@ module chacha20core(resetn, clk, nonce, cipher, done)
     quarter_round round3(qr3_a_in, qr3_b_in, qr3_c_in, qr3_d_in, qr3_a, qr3_b, qr3_c, qr3_d);
 
     //FSM
-    reg [1:0] state;
+    reg [1:0] state_fsm;
 
-    localparam ITERATE = 0x0;
+    localparam IDLE = 0x0;
     localparam COL = 0x1;
     localparam DIAGONAL = 0x2;
     localparam DONE = 0x3;
@@ -89,25 +89,26 @@ module chacha20core(resetn, clk, nonce, cipher, done)
 
     always @ (posedge clk)
         begin
-            if (resetn || state == IDLE) 
+            if (resetn || state_fsm == IDLE) 
                 phase <= 0;
                 counter <= 0;
-                state <= IDLE;
+                state_fsm <= IDLE;
+                ready <= 0;
 
-            else if (enable) state <= COL;
+            else if (enable) state_fsm <= COL;
         
-            else if (state == COL) begin
+            else if (state_fsm == COL) begin
 
                 s[0] <= qr0_a; s[4] <= qr0_b; s[8] <= qr0_c; s[12] <= qr0_d;
                 s[1]  <= qr1_a; s[5]  <= qr1_b; s[9]  <= qr1_c; s[13] <= qr1_d;
                 s[2]  <= qr2_a; s[6]  <= qr2_b; s[10] <= qr2_c; s[14] <= qr2_d;
                 s[3]  <= qr3_a; s[7]  <= qr3_b; s[11] <= qr3_c; s[15] <= qr3_d;
 
-                state <= DIAGONAL;
+                state_fsm <= DIAGONAL;
                 phase <= 1;
             end
 
-            else if (state == DIAGONAL) begin
+            else if (state_fsm == DIAGONAL) begin
 
                 s[0]  <= qr0_a; s[5]  <= qr0_b; s[10] <= qr0_c; s[15] <= qr0_d;
                 s[1]  <= qr1_a; s[6]  <= qr1_b; s[11] <= qr1_c; s[12] <= qr1_d;
@@ -117,13 +118,13 @@ module chacha20core(resetn, clk, nonce, cipher, done)
                 counter <= counter + 1;
                 phase <= 0;    
 
-                if (counter == 9) state <= DONE;
-                else state <= COL;
+                if (counter == 9) state_fsm <= DONE;
+                else state_fsm <= COL;
             end 
 
-            else if (state == DONE) begin
-                state <= IDLE;
-                done <= 1;
+            else if (state_fsm == DONE) begin
+                state_fsm <= IDLE;
+                ready <= 1;
             end
     
         end
