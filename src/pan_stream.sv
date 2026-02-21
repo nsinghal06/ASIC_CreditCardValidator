@@ -42,7 +42,11 @@ module pan_stream #(
     output logic        in_progress,
     output logic        card_done,
     output logic        digit_ok,
-    output logic        error_flag
+    output logic        error_flag,
+
+    output logic [75:0] pan_bcd,     // up to 19 digits * 4 bits
+    output logic        pan_ready    // 1 when card_done and data latched
+
 );
 
     localparam logic [4:0] MIN_LEN5    = MIN_LEN;
@@ -79,6 +83,8 @@ module pan_stream #(
 
             digit_ok            <= 1'b1;
             error_flag          <= 1'b0;
+            pan_bcd   <= '0;
+            pan_ready <= 1'b0;
         end 
         
         else begin
@@ -100,6 +106,8 @@ module pan_stream #(
 
                 digit_ok            <= 1'b1; //assume digit ok until error
                 error_flag          <= 1'b0;   // clear errors for new card
+                pan_bcd   <= '0;
+                pan_ready <= 1'b0;
             end
 
             // Abort cancels the current PAN
@@ -120,6 +128,8 @@ module pan_stream #(
                     digit_ok   <= 1'b0;
                     error_flag <= 1'b1;
                 end
+
+                pan_bcd[4*len_count +: 4] <= digit_in;
 
                 // Increment length
                 len_count <= len_count + 5'd1;
@@ -151,6 +161,7 @@ module pan_stream #(
                 len_final   <= len_count + (digit_valid ? 5'd1 : 5'd0);
 
                 card_done   <= 1'b1;
+                pan_ready <= 1'b1;
                 in_progress <= 1'b0;
             end
         end

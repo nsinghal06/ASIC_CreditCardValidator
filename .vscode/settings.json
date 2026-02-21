@@ -1,4 +1,10 @@
 {
   "verilog.linting.linter": "verilator",
-  "verilog.formatting.verilogHDL.formatter": "verible-verilog-format"
+  "verilog.formatting.verilogHDL.formatter": "verible-verilog-format",
+  "yaml.schemas": {
+    "file:///c%3A/Users/nisht/AppData/Local/Programs/Cognichip%20Beta/resources/app/extensions/deps-validation/schemas/deps-schema.json": [
+      "**/DEPS.yml",
+      "**/DEPS.yaml"
+    ]
+  }
 }

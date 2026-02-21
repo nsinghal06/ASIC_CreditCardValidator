@@ -6,7 +6,8 @@ SIM ?= icarus
 WAVES ?= 1
 TOPLEVEL_LANG ?= verilog
 SRC_DIR = $(PWD)/../src
-PROJECT_SOURCES = ../src/tt_um_CCValidator.sv ../src/pan_stream.sv
+#PROJECT_SOURCES = ../src/tt_um_CCValidator.sv ../src/pan_stream.sv
+PROJECT_SOURCES = pan_stream.sv
 
 ifneq ($(GATES),yes)
 
@@ -36,7 +37,7 @@ COMPILE_ARGS 		+= -I$(SRC_DIR)
 
 # Include the testbench sources:
 VERILOG_SOURCES += $(PWD)/tb.v
-TOPLEVEL = tb
+TOPLEVEL = pan_stream
 
 # List test modules to run, separated by commas and without the .py suffix:
 COCOTB_TEST_MODULES = test
