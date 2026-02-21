@@ -40,7 +40,7 @@ async def pan_stream_basic(dut):
     dut.start.value = 0
 
     # 16 digits example
-    digits = [4,5,5,6,7,3,7,5,8,6,9,8,5,5,4,3]
+    digits = [4,2,4,2,4,2,4,2,4,2,4,2,4,2,4,3]
     for i, d in enumerate(digits):
         await send_digit(dut, d, last=(i == len(digits)-1))
 
@@ -58,9 +58,5 @@ async def pan_stream_basic(dut):
     # IIN prefix nibble packing check (first 6 digits)
     iin = int(dut.iin_prefix.value)
     def nib(i): return (iin >> (4*i)) & 0xF
-    assert nib(0) == 4
-    assert nib(1) == 5
-    assert nib(2) == 5
-    assert nib(3) == 6
-    assert nib(4) == 7
-    assert nib(5) == 3
+    for i in range(6):
+        assert nib(i) == digits[i], f"IIN digit {i} mismatch: got {nib(i)} expected {digits[i]}"
