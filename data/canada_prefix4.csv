@@ -1,0 +1,47 @@
+key,brand_guess,type_guess,issuer_guess,desc
+3732,AMEX,unknown,Unknown,American Express Blue Airmiles Cash Back Card (Canada)
+3733,AMEX,credit,Unknown,American Express Blue Airmiles Card / SPG Credit Card (Canada) / AMEX Aeroplan Plus Platinum (Canada) / Business Platinum Charge Card (Canada)
+3735,AMEX,credit,Unknown,American Express Gold Cash Back Card / American Express Platinum Charge Card (Canada)
+4029,VISA,debit,TD,TD Bank Debit Card
+4216,VISA,prepaid,Unknown,Citizens Bank of Canada/Vancouver City Savings Credit Union Visa Gift Card
+4321,VISA,prepaid,Unknown,Citizens Bank of Canada/Vancouver City Savings Credit Union Visa Gift Card
+4349,VISA,credit,Unknown,Chase Card Services Canada Marriott Rewards Platinum Visa Card
+4482,VISA,credit,TD,TD Bank
+4500,VISA,credit,CIBC,Canadian Imperial Bank of Commerce (CIBC) Visa &amp; MBNA Quantum Visa Credit Cards
+4502,VISA,credit,CIBC,CIBC VISA
+4503,VISA,credit,CIBC,CIBC VISA
+4504,VISA,credit,CIBC,CIBC VISA
+4505,VISA,credit,CIBC,CIBC VISA
+4510,VISA,credit,RBC,Royal Bank of Canada (CA) - Visa
+4512,VISA,credit,RBC,Royal Bank of Canada (CA) - Visa
+4514,VISA,credit,RBC,Royal Bank of Canada RBC AVION Visa (Platinum/Infinite)
+4516,VISA,credit,RBC,RBC Banque Royale VISA BUSINESS (Affaires) - VISA
+4519,VISA,debit,RBC,Royal Bank of Canada (CA) - Client Card (ATM/INTERAC)
+4520,VISA,credit,TD,TD Bank CAD VISA
+4530,VISA,credit,Desjardins,VISA Desjardins Group
+4535,VISA,credit,Scotiabank,Scotiabank - Visa Card
+4536,VISA,debit,Scotiabank,Scotiabank - Interac Debit Card
+4537,VISA,credit,Scotiabank,Scotiabank - Visa Card
+4538,VISA,credit,Scotiabank,Scotiabank - Visa Card
+4540,VISA,credit,Desjardins,Carte d'accès Desjardins / VISA Desjardins
+4544,VISA,credit,Laurentian,Banque Laurentienne du Canada / Laurentian Bank of Canada (CA) - Visa
+4551,VISA,credit,TD,TD Bank/General Motors Corporation GM CAD VISA
+4587,VISA,prepaid,Peoples Trust,Peoples Trust Visa Gift Card
+4800,VISA,credit,MBNA,MBNA Gold Visa Credit Card
+4841,VISA,debit,National Bank,Old National Bank Commercial Debit Card
+5243,MASTERCARD,credit,Unknown,Hudson's Bay Company MasterCard Credit Card (Canada)
+5258,MASTERCARD,credit,National Bank,Mastercard National Bank of Canada (Canada)
+5259,MASTERCARD,credit,Canadian Tire,Canadian Tire Bank Cash Advantage Platinum MasterCard
+5268,MASTERCARD,credit,Unknown,CitiBank Platinum Enrich (Canada) MasterCard Credit Card
+5316,MASTERCARD,credit,Unknown,CUETS Financial Canada MasterCard Credit Card
+5317,MASTERCARD,unknown,Unknown,CUETS Financial Canada Global Payment MasterCard
+5329,MASTERCARD,credit,MBNA,MBNA Preferred MasterCard Credit Card
+5401,MASTERCARD,credit,MBNA,Bank of America (formerly MBNA) MasterCard Gold Credit Card
+5446,MASTERCARD,credit,Canadian Tire,Canadian Tire MasterCard Credit Card
+5452,MASTERCARD,credit,MBNA,MBNA Canada Mastercard
+5466,MASTERCARD,credit,MBNA,"Citibank, MBNA &amp; Chase World MasterCard Credit Cards,"
+5490,MASTERCARD,credit,MBNA,MBNA &amp; Chase Platinum MasterCard Credit Cards
+5491,MASTERCARD,credit,MBNA,"AT&amp;T Universal MasterCard Credit Card, now part of Citibank, also MBNA MasterCard Credit Cards"
+5523,MASTERCARD,credit,MBNA,MBNA Smart Cash World MasterCard (Canada)
+5524,MASTERCARD,credit,BMO,Bank Of Montreal World Elite MasterCard (Canada)
+6041,OTHER,prepaid,Unknown,Walmart Canada Gift Card

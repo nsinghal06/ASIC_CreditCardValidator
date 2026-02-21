@@ -58,6 +58,27 @@ module tb;
     .luhn_valid_raw(luhn_valid_raw)
   );
 
+    wire [15:0] prefix4_bcd = iin_prefix[15:0];
+
+  wire [2:0] brand_id;
+  wire [4:0] issuer_id;
+  wire [1:0] type_id;
+  wire meta_hit, meta_valid;
+
+  iin_prefix4_classifier meta_u (
+    .clk(clk),
+    .rst_n(rst_n),
+    .start(start),
+    .card_done(card_done),
+    .luhn_valid(luhn_valid),
+    .prefix4_bcd(prefix4_bcd),
+    .brand_id(brand_id),
+    .issuer_id(issuer_id),
+    .type_id(type_id),
+    .meta_hit(meta_hit),
+    .meta_valid(meta_valid)
+  );
+
 endmodule
 
 `default_nettype wire

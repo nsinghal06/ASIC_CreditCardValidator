@@ -8,7 +8,8 @@ TOPLEVEL_LANG ?= verilog
 SRC_DIR = $(PWD)/../src
 #PROJECT_SOURCES = ../src/tt_um_CCValidator.sv ../src/pan_stream.sv
 #PROJECT_SOURCES = pan_stream.sv
-PROJECT_SOURCES = pan_stream.sv luhn_validator.sv pan_luhn_bridge.sv
+#PROJECT_SOURCES = pan_stream.sv luhn_validator.sv pan_luhn_bridge.sv
+PROJECT_SOURCES = pan_stream.sv luhn_validator.sv pan_luhn_bridge.sv iin_prefix4_classifier.sv
 
 ifneq ($(GATES),yes)
 
