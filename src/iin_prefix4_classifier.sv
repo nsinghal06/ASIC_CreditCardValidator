@@ -4,22 +4,18 @@ module iin_prefix4_classifier (
     input  logic        clk,
     input  logic        rst_n,
 
-    // control
-    input  logic        start,       // clears outputs for new card
-    input  logic        card_done,    // 1-cycle pulse at end of PAN
-    input  logic        luhn_valid,   // from your luhn bridge
+    input  logic        start,
+    input  logic        card_done,
+    input  logic        luhn_valid,
 
-    // data
-    input  logic [15:0] prefix4_bcd, // iin_prefix[15:0] (4 BCD digits, nibble0=first digit)
+    input  logic [15:0] prefix4_bcd,   // iin_prefix[15:0], BCD nibble0=first digit
 
-    // outputs (IDs)
     output logic [2:0]  brand_id,
     output logic [4:0]  issuer_id,
     output logic [1:0]  type_id,
 
-    // status
-    output logic        meta_hit,     // table matched
-    output logic        meta_valid    // latched only when card_done && luhn_valid
+    output logic        meta_hit,
+    output logic        meta_valid
 );
 
     // ---------- ID encoding ----------
@@ -41,75 +37,86 @@ module iin_prefix4_classifier (
     localparam logic [4:0] ISS_SCOTIA    = 5'd5;
     localparam logic [4:0] ISS_LAUR      = 5'd6;
 
-    // digits from BCD (nibble0 is first digit)
+    //fallback brand from first digit(s) 
     logic [3:0] d0, d1;
+    logic [2:0] brand_fallback;
+
     assign d0 = prefix4_bcd[3:0];
     assign d1 = prefix4_bcd[7:4];
 
-    // fallback brand guess from first 1–2 digits
-    logic [2:0] brand_fallback;
-    always_comb begin
+    always @* begin
         brand_fallback = BRAND_UNKNOWN;
         if (d0 == 4'd4) brand_fallback = BRAND_VISA;
         else if (d0 == 4'd5) brand_fallback = BRAND_MC;
         else if (d0 == 4'd3 && (d1 == 4'd4 || d1 == 4'd7)) brand_fallback = BRAND_AMEX;
     end
 
-    // combinational classification result (this is the “GPU-ish parallel compare”)
-    logic [2:0]  brand_c;
-    logic [4:0]  issuer_c;
-    logic [1:0]  type_c;
-    logic        hit_c;
+    //GPU: parallel hit vector 
+    logic [19:0] hit;
 
-    always_comb begin
-        // defaults (no match)
-        hit_c    = 1'b0;
+    // constants use your BCD packing:
+    // "4510" -> 16'h0154 (nibble0=4 nibble1=5 nibble2=1 nibble3=0)
+    always @* begin
+        hit[0]  = (prefix4_bcd == 16'h9204); // 4029 TD debit
+        hit[1]  = (prefix4_bcd == 16'h2844); // 4482 TD credit
+        hit[2]  = (prefix4_bcd == 16'h0054); // 4500 CIBC credit
+        hit[3]  = (prefix4_bcd == 16'h2054); // 4502 CIBC credit
+        hit[4]  = (prefix4_bcd == 16'h3054); // 4503 CIBC credit
+        hit[5]  = (prefix4_bcd == 16'h4054); // 4504 CIBC credit
+        hit[6]  = (prefix4_bcd == 16'h5054); // 4505 CIBC credit
+        hit[7]  = (prefix4_bcd == 16'h0154); // 4510 RBC credit
+        hit[8]  = (prefix4_bcd == 16'h2154); // 4512 RBC credit
+        hit[9]  = (prefix4_bcd == 16'h4154); // 4514 RBC credit
+        hit[10] = (prefix4_bcd == 16'h6154); // 4516 RBC credit
+        hit[11] = (prefix4_bcd == 16'h9154); // 4519 RBC debit
+        hit[12] = (prefix4_bcd == 16'h0254); // 4520 TD credit
+        hit[13] = (prefix4_bcd == 16'h0354); // 4530 Desj credit
+        hit[14] = (prefix4_bcd == 16'h5354); // 4535 Scotia credit
+        hit[15] = (prefix4_bcd == 16'h6354); // 4536 Scotia debit
+        hit[16] = (prefix4_bcd == 16'h7354); // 4537 Scotia credit
+        hit[17] = (prefix4_bcd == 16'h8354); // 4538 Scotia credit
+        hit[18] = (prefix4_bcd == 16'h0454); // 4540 Desj credit
+        hit[19] = (prefix4_bcd == 16'h4454); // 4544 Laurentian credit
+    end
+
+    // reduction #1: OR-reduce "did any lane hit?"
+    logic hit_any;
+    assign hit_any = |hit;
+
+    // reduction #2: priority select metadata (no break; if/else chain)
+    logic [2:0] brand_c;
+    logic [4:0] issuer_c;
+    logic [1:0] type_c;
+
+    always @* begin
         brand_c  = brand_fallback;
         issuer_c = ISS_UNKNOWN;
         type_c   = TYPE_UNKNOWN;
 
-        // NOTE: these constants match your BCD packing:
-        // key "4510" => nibble0=4 nibble1=5 nibble2=1 nibble3=0 => 16'h0154
-        unique case (prefix4_bcd)
-
-            // TD
-            16'h9204: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_TD;   type_c=TYPE_DEBIT;  end // 4029
-            16'h2844: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_TD;   type_c=TYPE_CREDIT; end // 4482
-            16'h0254: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_TD;   type_c=TYPE_CREDIT; end // 4520
-
-            // CIBC
-            16'h0054: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_CIBC; type_c=TYPE_CREDIT; end // 4500
-            16'h2054: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_CIBC; type_c=TYPE_CREDIT; end // 4502
-            16'h3054: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_CIBC; type_c=TYPE_CREDIT; end // 4503
-            16'h4054: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_CIBC; type_c=TYPE_CREDIT; end // 4504
-            16'h5054: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_CIBC; type_c=TYPE_CREDIT; end // 4505
-
-            // RBC
-            16'h0154: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_RBC;  type_c=TYPE_CREDIT; end // 4510
-            16'h2154: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_RBC;  type_c=TYPE_CREDIT; end // 4512
-            16'h4154: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_RBC;  type_c=TYPE_CREDIT; end // 4514
-            16'h6154: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_RBC;  type_c=TYPE_CREDIT; end // 4516
-            16'h9154: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_RBC;  type_c=TYPE_DEBIT;  end // 4519
-
-            // Desjardins
-            16'h0354: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_DESJ; type_c=TYPE_CREDIT; end // 4530
-            16'h0454: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_DESJ; type_c=TYPE_CREDIT; end // 4540
-
-            // Scotiabank
-            16'h5354: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_SCOTIA; type_c=TYPE_CREDIT; end // 4535
-            16'h6354: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_SCOTIA; type_c=TYPE_DEBIT;  end // 4536
-            16'h7354: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_SCOTIA; type_c=TYPE_CREDIT; end // 4537
-            16'h8354: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_SCOTIA; type_c=TYPE_CREDIT; end // 4538
-
-            // Laurentian
-            16'h4454: begin hit_c=1'b1; brand_c=BRAND_VISA; issuer_c=ISS_LAUR; type_c=TYPE_CREDIT; end // 4544
-
-            default: begin end
-        endcase
+        if      (hit[0])  begin brand_c=BRAND_VISA; issuer_c=ISS_TD;     type_c=TYPE_DEBIT;  end
+        else if (hit[1])  begin brand_c=BRAND_VISA; issuer_c=ISS_TD;     type_c=TYPE_CREDIT; end
+        else if (hit[2])  begin brand_c=BRAND_VISA; issuer_c=ISS_CIBC;   type_c=TYPE_CREDIT; end
+        else if (hit[3])  begin brand_c=BRAND_VISA; issuer_c=ISS_CIBC;   type_c=TYPE_CREDIT; end
+        else if (hit[4])  begin brand_c=BRAND_VISA; issuer_c=ISS_CIBC;   type_c=TYPE_CREDIT; end
+        else if (hit[5])  begin brand_c=BRAND_VISA; issuer_c=ISS_CIBC;   type_c=TYPE_CREDIT; end
+        else if (hit[6])  begin brand_c=BRAND_VISA; issuer_c=ISS_CIBC;   type_c=TYPE_CREDIT; end
+        else if (hit[7])  begin brand_c=BRAND_VISA; issuer_c=ISS_RBC;    type_c=TYPE_CREDIT; end
+        else if (hit[8])  begin brand_c=BRAND_VISA; issuer_c=ISS_RBC;    type_c=TYPE_CREDIT; end
+        else if (hit[9])  begin brand_c=BRAND_VISA; issuer_c=ISS_RBC;    type_c=TYPE_CREDIT; end
+        else if (hit[10]) begin brand_c=BRAND_VISA; issuer_c=ISS_RBC;    type_c=TYPE_CREDIT; end
+        else if (hit[11]) begin brand_c=BRAND_VISA; issuer_c=ISS_RBC;    type_c=TYPE_DEBIT;  end
+        else if (hit[12]) begin brand_c=BRAND_VISA; issuer_c=ISS_TD;     type_c=TYPE_CREDIT; end
+        else if (hit[13]) begin brand_c=BRAND_VISA; issuer_c=ISS_DESJ;   type_c=TYPE_CREDIT; end
+        else if (hit[14]) begin brand_c=BRAND_VISA; issuer_c=ISS_SCOTIA; type_c=TYPE_CREDIT; end
+        else if (hit[15]) begin brand_c=BRAND_VISA; issuer_c=ISS_SCOTIA; type_c=TYPE_DEBIT;  end
+        else if (hit[16]) begin brand_c=BRAND_VISA; issuer_c=ISS_SCOTIA; type_c=TYPE_CREDIT; end
+        else if (hit[17]) begin brand_c=BRAND_VISA; issuer_c=ISS_SCOTIA; type_c=TYPE_CREDIT; end
+        else if (hit[18]) begin brand_c=BRAND_VISA; issuer_c=ISS_DESJ;   type_c=TYPE_CREDIT; end
+        else if (hit[19]) begin brand_c=BRAND_VISA; issuer_c=ISS_LAUR;   type_c=TYPE_CREDIT; end
     end
 
-    // latch outputs only when card is done AND Luhn passed
-    always_ff @(posedge clk or negedge rst_n) begin
+    // latch only when card_done && luhn_valid
+    always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             brand_id   <= BRAND_UNKNOWN;
             issuer_id  <= ISS_UNKNOWN;
@@ -130,10 +137,9 @@ module iin_prefix4_classifier (
                     brand_id   <= brand_c;
                     issuer_id  <= issuer_c;
                     type_id    <= type_c;
-                    meta_hit   <= hit_c;
+                    meta_hit   <= hit_any;
                     meta_valid <= 1'b1;
                 end else begin
-                    // if invalid PAN, don't publish metadata
                     meta_valid <= 1'b0;
                     meta_hit   <= 1'b0;
                     brand_id   <= BRAND_UNKNOWN;

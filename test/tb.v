@@ -23,6 +23,14 @@ module tb;
   wire [75:0] pan_bcd;
   wire pan_ready;
 
+    reg  [95:0] nonce_in;
+  reg         nonce_valid;
+
+  wire [63:0] token64;
+  wire [15:0] token_tag16;
+  wire        token_valid;
+  wire        token_busy;
+
   // 100 MHz clock
   always #5 clk = ~clk;
 
@@ -78,6 +86,27 @@ module tb;
     .meta_hit(meta_hit),
     .meta_valid(meta_valid)
   );
+
+    pan_tokenizer tok_u (
+    .clk(clk),
+    .rst_n(rst_n),
+
+    .start(start),
+    .card_done(card_done),
+    .pan_ready(pan_ready),
+    .luhn_valid(luhn_valid),
+    .len_final(len_final),
+    .pan_bcd(pan_bcd),
+
+    .nonce_in(nonce_in),
+    .nonce_valid(nonce_valid),
+
+    .token64(token64),
+    .token_tag16(token_tag16),
+    .token_valid(token_valid),
+    .token_busy(token_busy)
+  );
+
 
 endmodule
 
