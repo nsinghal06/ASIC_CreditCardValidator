@@ -1,0 +1,363 @@
+// Testbench for ChaCha20 Decryption Module
+// Verifies the XOR-based decryption operation and symmetric cipher property
+
+module tb_decryption;
+
+    // Test signals for 32-bit decryption module
+    logic [31:0] ciphertext_32;
+    logic [31:0] keystream_32;
+    logic [31:0] plaintext_32;
+    logic [31:0] expected_plaintext_32;
+    
+    // Test signals for 64-bit decryption module
+    logic [63:0] ciphertext_64;
+    logic [63:0] keystream_64;
+    logic [63:0] plaintext_64;
+    logic [63:0] expected_plaintext_64;
+    
+    // Test signals for 8-bit decryption module
+    logic [7:0] ciphertext_8;
+    logic [7:0] keystream_8;
+    logic [7:0] plaintext_8;
+    logic [7:0] expected_plaintext_8;
+    
+    // Test tracking
+    int test_num;
+    int errors;
+    
+    // Instantiate DUT - 32-bit version
+    decryption #(.DATA_WIDTH(32)) dut_32 (
+        .ciphertext(ciphertext_32),
+        .keystream(keystream_32),
+        .plaintext(plaintext_32)
+    );
+    
+    // Instantiate DUT - 64-bit version
+    decryption #(.DATA_WIDTH(64)) dut_64 (
+        .ciphertext(ciphertext_64),
+        .keystream(keystream_64),
+        .plaintext(plaintext_64)
+    );
+    
+    // Instantiate DUT - 8-bit version
+    decryption #(.DATA_WIDTH(8)) dut_8 (
+        .ciphertext(ciphertext_8),
+        .keystream(keystream_8),
+        .plaintext(plaintext_8)
+    );
+
+    // Task to test 32-bit decryption
+    task automatic test_decrypt_32(
+        input [31:0] cipher, keystr, exp_plain,
+        input string test_name
+    );
+        begin
+            test_num++;
+            $display("\n--- Test %0d: %s (32-bit) ---", test_num, test_name);
+            $display("Ciphertext: 0x%08h", cipher);
+            $display("Keystream:  0x%08h", keystr);
+            $display("Expected:   0x%08h", exp_plain);
+            
+            // Apply inputs
+            ciphertext_32 = cipher;
+            keystream_32 = keystr;
+            expected_plaintext_32 = exp_plain;
+            
+            // Wait for combinational logic
+            #10;
+            
+            $display("Output:     0x%08h", plaintext_32);
+            
+            // Check result
+            if (plaintext_32 !== expected_plaintext_32) begin
+                $display("LOG: %0t : ERROR : tb_decryption : dut_32.plaintext : expected_value: 0x%08h actual_value: 0x%08h", 
+                         $time, expected_plaintext_32, plaintext_32);
+                $display("Test %0d FAILED", test_num);
+                errors++;
+            end else begin
+                $display("LOG: %0t : INFO : tb_decryption : dut_32.plaintext : expected_value: 0x%08h actual_value: 0x%08h", 
+                         $time, expected_plaintext_32, plaintext_32);
+                $display("Test %0d PASSED", test_num);
+            end
+        end
+    endtask
+
+    // Task to test 64-bit decryption
+    task automatic test_decrypt_64(
+        input [63:0] cipher, keystr, exp_plain,
+        input string test_name
+    );
+        begin
+            test_num++;
+            $display("\n--- Test %0d: %s (64-bit) ---", test_num, test_name);
+            $display("Ciphertext: 0x%016h", cipher);
+            $display("Keystream:  0x%016h", keystr);
+            $display("Expected:   0x%016h", exp_plain);
+            
+            // Apply inputs
+            ciphertext_64 = cipher;
+            keystream_64 = keystr;
+            expected_plaintext_64 = exp_plain;
+            
+            // Wait for combinational logic
+            #10;
+            
+            $display("Output:     0x%016h", plaintext_64);
+            
+            // Check result
+            if (plaintext_64 !== expected_plaintext_64) begin
+                $display("LOG: %0t : ERROR : tb_decryption : dut_64.plaintext : expected_value: 0x%016h actual_value: 0x%016h", 
+                         $time, expected_plaintext_64, plaintext_64);
+                $display("Test %0d FAILED", test_num);
+                errors++;
+            end else begin
+                $display("LOG: %0t : INFO : tb_decryption : dut_64.plaintext : expected_value: 0x%016h actual_value: 0x%016h", 
+                         $time, expected_plaintext_64, plaintext_64);
+                $display("Test %0d PASSED", test_num);
+            end
+        end
+    endtask
+
+    // Task to test 8-bit decryption
+    task automatic test_decrypt_8(
+        input [7:0] cipher, keystr, exp_plain,
+        input string test_name
+    );
+        begin
+            test_num++;
+            $display("\n--- Test %0d: %s (8-bit) ---", test_num, test_name);
+            $display("Ciphertext: 0x%02h", cipher);
+            $display("Keystream:  0x%02h", keystr);
+            $display("Expected:   0x%02h", exp_plain);
+            
+            // Apply inputs
+            ciphertext_8 = cipher;
+            keystream_8 = keystr;
+            expected_plaintext_8 = exp_plain;
+            
+            // Wait for combinational logic
+            #10;
+            
+            $display("Output:     0x%02h", plaintext_8);
+            
+            // Check result
+            if (plaintext_8 !== expected_plaintext_8) begin
+                $display("LOG: %0t : ERROR : tb_decryption : dut_8.plaintext : expected_value: 0x%02h actual_value: 0x%02h", 
+                         $time, expected_plaintext_8, plaintext_8);
+                $display("Test %0d FAILED", test_num);
+                errors++;
+            end else begin
+                $display("LOG: %0t : INFO : tb_decryption : dut_8.plaintext : expected_value: 0x%02h actual_value: 0x%02h", 
+                         $time, expected_plaintext_8, plaintext_8);
+                $display("Test %0d PASSED", test_num);
+            end
+        end
+    endtask
+
+    // Task to verify symmetric encryption/decryption
+    task automatic test_symmetric_property_32(
+        input [31:0] original_plaintext, test_keystream,
+        input string test_name
+    );
+        logic [31:0] encrypted_data;
+        logic [31:0] decrypted_data;
+        begin
+            test_num++;
+            $display("\n--- Test %0d: %s ---", test_num, test_name);
+            $display("Original Plaintext: 0x%08h", original_plaintext);
+            $display("Keystream:          0x%08h", test_keystream);
+            
+            // Simulate encryption: plaintext XOR keystream = ciphertext
+            encrypted_data = original_plaintext ^ test_keystream;
+            $display("Encrypted Data:     0x%08h", encrypted_data);
+            
+            // Now decrypt: ciphertext XOR keystream should equal original plaintext
+            ciphertext_32 = encrypted_data;
+            keystream_32 = test_keystream;
+            #10;
+            decrypted_data = plaintext_32;
+            
+            $display("Decrypted Data:     0x%08h", decrypted_data);
+            
+            // Verify decrypted equals original
+            if (decrypted_data !== original_plaintext) begin
+                $display("LOG: %0t : ERROR : tb_decryption : symmetric_test : expected_value: 0x%08h actual_value: 0x%08h", 
+                         $time, original_plaintext, decrypted_data);
+                $display("Test %0d FAILED - Symmetric property violated!", test_num);
+                errors++;
+            end else begin
+                $display("LOG: %0t : INFO : tb_decryption : symmetric_test : expected_value: 0x%08h actual_value: 0x%08h", 
+                         $time, original_plaintext, decrypted_data);
+                $display("Test %0d PASSED - Symmetric property verified!", test_num);
+            end
+        end
+    endtask
+
+    // Main test sequence
+    initial begin
+        $display("TEST START");
+        $display("========================================");
+        $display("ChaCha20 Decryption Module Testbench");
+        $display("========================================");
+        
+        test_num = 0;
+        errors = 0;
+        
+        // Initialize inputs
+        ciphertext_32 = 32'h0;
+        keystream_32 = 32'h0;
+        ciphertext_64 = 64'h0;
+        keystream_64 = 64'h0;
+        ciphertext_8 = 8'h0;
+        keystream_8 = 8'h0;
+        
+        #10;
+        
+        $display("\n========================================");
+        $display("Testing 32-bit Decryption Module");
+        $display("========================================");
+        
+        // Test 1: All zeros
+        test_decrypt_32(
+            32'h00000000, 32'h00000000, 32'h00000000,
+            "All zeros"
+        );
+        
+        // Test 2: Keystream all zeros (ciphertext passes through)
+        test_decrypt_32(
+            32'hDEADBEEF, 32'h00000000, 32'hDEADBEEF,
+            "Zero keystream"
+        );
+        
+        // Test 3: Known XOR test
+        test_decrypt_32(
+            32'hFFFFFFFF, 32'hAAAAAAAA, 32'h55555555,
+            "All ones XOR alternating"
+        );
+        
+        // Test 4: ChaCha20-like test vector
+        test_decrypt_32(
+            32'h12345678, 32'hABCDEF01, 32'hB9F9B979,
+            "ChaCha20 style vector"
+        );
+        
+        // Test 5: Maximum values
+        test_decrypt_32(
+            32'hFFFFFFFF, 32'hFFFFFFFF, 32'h00000000,
+            "All ones XOR all ones"
+        );
+        
+        // Test 6: Alternating bits
+        test_decrypt_32(
+            32'hAAAAAAAA, 32'h55555555, 32'hFFFFFFFF,
+            "Alternating bits"
+        );
+        
+        // Test 7: Sequential pattern
+        test_decrypt_32(
+            32'h12345678, 32'h11111111, 32'h03254769,
+            "Sequential pattern"
+        );
+        
+        $display("\n========================================");
+        $display("Testing Symmetric Cipher Property");
+        $display("========================================");
+        
+        // Test 8-11: Verify symmetric property - encrypt then decrypt
+        test_symmetric_property_32(
+            32'h48656C6C,  // "Hell" in ASCII
+            32'hDEADBEEF,
+            "Symmetric test - ASCII text"
+        );
+        
+        test_symmetric_property_32(
+            32'h00000000,
+            32'h12345678,
+            "Symmetric test - Zero plaintext"
+        );
+        
+        test_symmetric_property_32(
+            32'hFFFFFFFF,
+            32'hAAAAAAAA,
+            "Symmetric test - Max plaintext"
+        );
+        
+        test_symmetric_property_32(
+            32'hCAFEBABE,
+            32'hDEADC0DE,
+            "Symmetric test - Hex patterns"
+        );
+        
+        $display("\n========================================");
+        $display("Testing 64-bit Decryption Module");
+        $display("========================================");
+        
+        // Test 12: 64-bit all zeros
+        test_decrypt_64(
+            64'h0000000000000000, 64'h0000000000000000, 64'h0000000000000000,
+            "64-bit all zeros"
+        );
+        
+        // Test 13: 64-bit known vector
+        test_decrypt_64(
+            64'hDEADBEEFCAFEBABE, 64'h123456789ABCDEF0, 64'hCCA9E8869252540E,
+            "64-bit known vector"
+        );
+        
+        // Test 14: 64-bit all ones
+        test_decrypt_64(
+            64'hFFFFFFFFFFFFFFFF, 64'hAAAAAAAAAAAAAAAA, 64'h5555555555555555,
+            "64-bit all ones XOR alternating"
+        );
+        
+        $display("\n========================================");
+        $display("Testing 8-bit Decryption Module");
+        $display("========================================");
+        
+        // Test 15: 8-bit all zeros
+        test_decrypt_8(
+            8'h00, 8'h00, 8'h00,
+            "8-bit all zeros"
+        );
+        
+        // Test 16: 8-bit known vector
+        test_decrypt_8(
+            8'hAB, 8'h12, 8'hB9,
+            "8-bit known vector"
+        );
+        
+        // Test 17: 8-bit all ones
+        test_decrypt_8(
+            8'hFF, 8'hAA, 8'h55,
+            "8-bit all ones XOR alternating"
+        );
+        
+        #10;
+        
+        // Final report
+        $display("\n========================================");
+        $display("Test Summary");
+        $display("========================================");
+        $display("Total tests run: %0d", test_num);
+        $display("Total errors: %0d", errors);
+        
+        if (errors == 0) begin
+            $display("\nAll decryption tests verified successfully!");
+            $display("Symmetric cipher property confirmed: (P XOR K) XOR K = P");
+            $display("\nTEST PASSED");
+        end else begin
+            $display("\nTEST FAILED");
+            $display("ERROR");
+            $error("Testbench completed with %0d errors", errors);
+        end
+        
+        $finish;
+    end
+
+    // Waveform dump
+    initial begin
+        $dumpfile("dumpfile.fst");
+        $dumpvars(0);
+    end
+
+endmodule

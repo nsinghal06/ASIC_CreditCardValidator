@@ -1,0 +1,192 @@
+// Testbench for Quarter Round Function
+// Tests the ChaCha cipher quarter round operation
+
+module tb_quarter_round;
+
+    // Testbench signals
+    logic [31:0] a_in;
+    logic [31:0] b_in;
+    logic [31:0] c_in;
+    logic [31:0] d_in;
+    logic [31:0] a_out;
+    logic [31:0] b_out;
+    logic [31:0] c_out;
+    logic [31:0] d_out;
+
+    // Expected values for verification
+    logic [31:0] expected_a, expected_b, expected_c, expected_d;
+    
+    // Test tracking
+    int test_num;
+    int errors;
+    
+    // Instantiate DUT
+    quarter_round dut (
+        .a_in(a_in),
+        .b_in(b_in),
+        .c_in(c_in),
+        .d_in(d_in),
+        .a_out(a_out),
+        .b_out(b_out),
+        .c_out(c_out),
+        .d_out(d_out)
+    );
+
+    // Task to apply test vector and check results
+    task automatic test_quarter_round(
+        input [31:0] a, b, c, d,
+        input [31:0] exp_a, exp_b, exp_c, exp_d,
+        input string test_name
+    );
+        begin
+            test_num++;
+            $display("\n--- Test %0d: %s ---", test_num, test_name);
+            $display("Inputs:  a=0x%08h, b=0x%08h, c=0x%08h, d=0x%08h", a, b, c, d);
+            
+            // Apply inputs
+            a_in = a;
+            b_in = b;
+            c_in = c;
+            d_in = d;
+            expected_a = exp_a;
+            expected_b = exp_b;
+            expected_c = exp_c;
+            expected_d = exp_d;
+            
+            // Wait for combinational logic to settle
+            #10;
+            
+            // Check outputs
+            $display("Outputs: a=0x%08h, b=0x%08h, c=0x%08h, d=0x%08h", a_out, b_out, c_out, d_out);
+            $display("Expected: a=0x%08h, b=0x%08h, c=0x%08h, d=0x%08h", exp_a, exp_b, exp_c, exp_d);
+            
+            // Verify each output
+            if (a_out !== expected_a) begin
+                $display("LOG: %0t : ERROR : tb_quarter_round : dut.a_out : expected_value: 0x%08h actual_value: 0x%08h", $time, expected_a, a_out);
+                errors++;
+            end
+            if (b_out !== expected_b) begin
+                $display("LOG: %0t : ERROR : tb_quarter_round : dut.b_out : expected_value: 0x%08h actual_value: 0x%08h", $time, expected_b, b_out);
+                errors++;
+            end
+            if (c_out !== expected_c) begin
+                $display("LOG: %0t : ERROR : tb_quarter_round : dut.c_out : expected_value: 0x%08h actual_value: 0x%08h", $time, expected_c, c_out);
+                errors++;
+            end
+            if (d_out !== expected_d) begin
+                $display("LOG: %0t : ERROR : tb_quarter_round : dut.d_out : expected_value: 0x%08h actual_value: 0x%08h", $time, expected_d, d_out);
+                errors++;
+            end
+            
+            if (a_out === expected_a && b_out === expected_b && 
+                c_out === expected_c && d_out === expected_d) begin
+                $display("LOG: %0t : INFO : tb_quarter_round : dut : expected_value: PASS actual_value: PASS", $time);
+                $display("Test %0d PASSED", test_num);
+            end else begin
+                $display("Test %0d FAILED", test_num);
+            end
+        end
+    endtask
+
+    // Main test sequence
+    initial begin
+        $display("TEST START");
+        $display("========================================");
+        $display("Quarter Round Function Testbench");
+        $display("========================================");
+        
+        test_num = 0;
+        errors = 0;
+        
+        // Initialize inputs
+        a_in = 32'h0;
+        b_in = 32'h0;
+        c_in = 32'h0;
+        d_in = 32'h0;
+        
+        #10;
+        
+        // Test 1: Known test vector from ChaCha20 specification
+        // These are the standard test vectors from RFC 7539
+        test_quarter_round(
+            32'h11111111, 32'h01020304, 32'h9b8d6f43, 32'h01234567,
+            32'hea2a92f4, 32'hcb1cf8ce, 32'h4581472e, 32'h5881c4bb,
+            "ChaCha20 RFC 7539 Example"
+        );
+        
+        // Test 2: All zeros
+        test_quarter_round(
+            32'h00000000, 32'h00000000, 32'h00000000, 32'h00000000,
+            32'h00000000, 32'h00000000, 32'h00000000, 32'h00000000,
+            "All zeros"
+        );
+        
+        // Test 3: Simple pattern test
+        test_quarter_round(
+            32'h00000001, 32'h00000000, 32'h00000000, 32'h00000000,
+            32'h08008145, 32'h00000080, 32'h00010200, 32'h20500000,
+            "Simple pattern a=1"
+        );
+        
+        // Test 4: Pattern with all inputs equal
+        test_quarter_round(
+            32'h12345678, 32'h12345678, 32'h12345678, 32'h12345678,
+            32'h7cba229c, 32'h3e5ca5e6, 32'h5fc4b5f2, 32'h1da0bb66,
+            "Equal inputs"
+        );
+        
+        // Test 5: Maximum values
+        test_quarter_round(
+            32'hffffffff, 32'hffffffff, 32'hffffffff, 32'hffffffff,
+            32'hfc7a7e7f, 32'h001f81ff, 32'hfe7effff, 32'hfffffc00,
+            "All ones (max values)"
+        );
+        
+        // Test 6: Alternating bit pattern
+        test_quarter_round(
+            32'haaaaaaaa, 32'h55555555, 32'haaaaaaaa, 32'h55555555,
+            32'h7e3f4e93, 32'h24c0f09f, 32'h2aaa00aa, 32'haaaae281,
+            "Alternating bits"
+        );
+        
+        // Test 7: Another known vector from ChaCha quarter round
+        test_quarter_round(
+            32'h879531e0, 32'hc5ecf37d, 32'h516461b1, 32'hc9a62f8a,
+            32'h8faea0ee, 32'h5f9cecb2, 32'h3e4f70a1, 32'h2c9b0c0a,
+            "ChaCha quarter round vector 2"
+        );
+        
+        // Test 8: Sequential values
+        test_quarter_round(
+            32'h00000001, 32'h00000002, 32'h00000003, 32'h00000004,
+            32'h10000531, 32'h00001480, 32'h00030501, 32'h51000200,
+            "Sequential values 1,2,3,4"
+        );
+        
+        #10;
+        
+        // Final report
+        $display("\n========================================");
+        $display("Test Summary");
+        $display("========================================");
+        $display("Total tests run: %0d", test_num);
+        $display("Total errors: %0d", errors);
+        
+        if (errors == 0) begin
+            $display("\nTEST PASSED");
+        end else begin
+            $display("\nTEST FAILED");
+            $display("ERROR");
+            $error("Testbench completed with %0d errors", errors);
+        end
+        
+        $finish;
+    end
+
+    // Waveform dump
+    initial begin
+        $dumpfile("dumpfile.fst");
+        $dumpvars(0);
+    end
+
+endmodule
