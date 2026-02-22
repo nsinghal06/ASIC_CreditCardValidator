@@ -16,6 +16,7 @@ module tt_um_CCValidator (
     input  wire       rst_n
 );
 
+   
   wire [3:0] digit_in    = ui_in[3:0];
   wire       digit_valid = ui_in[4];
   wire       start       = ui_in[5];
@@ -50,7 +51,8 @@ module tt_um_CCValidator (
     .valid(luhn_valid_raw)
     );
 
-  wire luhn_valid = (len_final == 5'd16) ? luhn_valid_raw : 1'b0;
+  wire len16 = (len_final === 5'd16);   // '===' returns 0 if len_final has any 
+  wire luhn_valid = len16 ? luhn_valid_raw : 1'b0;
 
   wire [15:0] prefix4_bcd = iin_prefix[15:0];
 
@@ -135,14 +137,14 @@ module tt_um_CCValidator (
   assign uo_out = stream_active ? token_byte : 8'h00;
 
   assign uio_oe  = 8'hFF;
-  assign uio_out = {
-    (token_busy | stream_active),
-    meta_valid,
-    meta_hit,
-    luhn_valid,
-    stream_active,
-    byte_idx
-  };
+ assign uio_out = (!rst_n) ? 8'h00 : {
+  (token_busy | stream_active),
+  meta_valid,
+  meta_hit,
+  luhn_valid,
+  stream_active,
+  byte_idx
+};
 
   wire _unused = &{ui_in[7], uio_in[7:0], ena, brand_id, issuer_id, type_id, token_tag16, 1'b0};
 
