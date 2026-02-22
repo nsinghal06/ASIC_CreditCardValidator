@@ -7,7 +7,7 @@ project:
   language:     "SystemVerilog"
   clock_hz:     0
 
-  tiles: "2x2"
+  tiles: "3x3"
 
   top_module:  "tt_um_CCValidator"
 
