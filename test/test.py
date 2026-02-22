@@ -2,7 +2,6 @@ import cocotb
 from cocotb.triggers import RisingEdge
 from cocotb.clock import Clock
 
-
 BRAND_STR = {0:"UNKNOWN", 1:"VISA", 2:"MASTERCARD", 3:"AMEX"}
 TYPE_STR  = {0:"UNKNOWN", 1:"CREDIT", 2:"DEBIT", 3:"PREPAID"}
 ISSUER_STR= {0:"UNKNOWN", 1:"TD", 2:"CIBC", 3:"RBC", 4:"DESJ", 5:"SCOTIA", 6:"LAUR"}
@@ -22,54 +21,6 @@ DATASET = [
 
 EXTRA_REPEAT = ("T1_REPEAT", "4029163778265418", "VALID")
 
-async def reset_dut(dut):
-    dut.rst_n.value = 0
-    await RisingEdge(dut.clk)
-    await RisingEdge(dut.clk)
-    dut.rst_n.value = 1
-    await RisingEdge(dut.clk)
-    await RisingEdge(dut.clk)
-
-async def pulse_start(dut):
-    dut.start.value = 1
-    await RisingEdge(dut.clk)
-    dut.start.value = 0
-
-async def pulse_nonce(dut, nonce_int):
-    dut.nonce_in.value = nonce_int
-    dut.nonce_valid.value = 1
-    await RisingEdge(dut.clk)
-    dut.nonce_valid.value = 0
-
-async def send_pan(dut, pan_str):
-    assert pan_str.isdigit()
-    digits = [int(c) for c in pan_str]
-    for i, d in enumerate(digits):
-        dut.digit_in.value = d
-        dut.digit_valid.value = 1
-        dut.pan_end.value = 1 if (i == len(digits) - 1) else 0
-        await RisingEdge(dut.clk)
-        dut.digit_valid.value = 0
-        dut.pan_end.value = 0
-        dut.digit_in.value = 0
-        await RisingEdge(dut.clk)
-    return digits
-
-async def wait_for_token(dut, max_cycles=600):
-    for _ in range(max_cycles):
-        await RisingEdge(dut.clk)
-        if int(dut.token_valid.value) == 1:
-            tok64 = int(dut.token64.value) if hasattr(dut, "token64") else None
-            tag16 = int(dut.token_tag16.value) if hasattr(dut, "token_tag16") else None
-            return tok64, tag16
-    raise AssertionError("token_valid never asserted")
-
-async def assert_no_token(dut, max_cycles=500):
-    for _ in range(max_cycles):
-        await RisingEdge(dut.clk)
-        if int(dut.token_valid.value) == 1:
-            raise AssertionError("token_valid asserted unexpectedly")
-
 def expected_behavior(label, length):
     if length != 16:
         return dict(expect_luhn=0, expect_token=False, expect_meta_valid=0, expect_meta_hit=None)
@@ -81,17 +32,80 @@ def expected_behavior(label, length):
         return dict(expect_luhn=1, expect_token=True,  expect_meta_valid=1, expect_meta_hit=0)
     return dict(expect_luhn=0, expect_token=False, expect_meta_valid=0, expect_meta_hit=None)
 
+def ui_word(digit, digit_valid, start, pan_end):
+    return ((digit & 0xF) |
+            ((1 if digit_valid else 0) << 4) |
+            ((1 if start else 0) << 5) |
+            ((1 if pan_end else 0) << 6))
+
+async def reset_dut(dut):
+    dut.rst_n.value = 0
+    dut.ui_in.value = 0
+    dut.uio_in.value = 0
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    dut.rst_n.value = 1
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+
+async def pulse_start_tt(dut):
+    dut.ui_in.value = ui_word(0, 0, 1, 0)
+    await RisingEdge(dut.clk)
+    dut.ui_in.value = 0
+    await RisingEdge(dut.clk)
+
+async def send_pan_tt(dut, pan_str):
+    assert pan_str.isdigit()
+    digits = [int(c) for c in pan_str]
+    for i, d in enumerate(digits):
+        last = (i == len(digits) - 1)
+        dut.ui_in.value = ui_word(d, 1, 0, 1 if last else 0)
+        await RisingEdge(dut.clk)
+        dut.ui_in.value = 0
+        await RisingEdge(dut.clk)
+    return digits
+
+async def wait_for_token64_stream(dut, max_cycles=2000):
+    for _ in range(max_cycles):
+        await RisingEdge(dut.clk)
+        stream_active = (int(dut.uio_out.value) >> 3) & 0x1
+        if stream_active == 1:
+            break
+    else:
+        raise AssertionError("token stream never started (uio_out[3] never went high)")
+
+    bytes_out = [0] * 8
+    seen = [False] * 8
+
+    for _ in range(max_cycles):
+        stream_active = (int(dut.uio_out.value) >> 3) & 0x1
+        if stream_active == 0:
+            break
+        idx = int(dut.uio_out.value) & 0x7
+        b = int(dut.uo_out.value) & 0xFF
+        if 0 <= idx <= 7:
+            bytes_out[idx] = b
+            seen[idx] = True
+        await RisingEdge(dut.clk)
+
+    if not all(seen):
+        raise AssertionError(f"token stream incomplete, missing byte indices: {[i for i,v in enumerate(seen) if not v]}")
+
+    tok64 = 0
+    for i in range(7, -1, -1):
+        tok64 = (tok64 << 8) | (bytes_out[i] & 0xFF)
+    return tok64
+
+async def assert_no_token_stream(dut, max_cycles=1200):
+    for _ in range(max_cycles):
+        await RisingEdge(dut.clk)
+        stream_active = (int(dut.uio_out.value) >> 3) & 0x1
+        if stream_active == 1:
+            raise AssertionError("token stream started unexpectedly (uio_out[3] went high)")
+
 @cocotb.test()
 async def run_dataset(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
-
-    dut.start.value = 0
-    dut.pan_end.value = 0
-    dut.digit_valid.value = 0
-    dut.digit_in.value = 0
-    dut.nonce_in.value = 0
-    dut.nonce_valid.value = 0
-
     await reset_dut(dut)
 
     print(r"""
@@ -110,35 +124,25 @@ async def run_dataset(dut):
     print("--------------------------------------------------------------------------------------")
 
     all_tests = DATASET + [EXTRA_REPEAT]
-    base_nonce = 0x0123456789ABCDEF01230000
     last_token_for_pan = {}
 
     for idx, (tid, pan, label) in enumerate(all_tests):
         digits = [int(c) for c in pan]
         beh = expected_behavior(label, len(digits))
 
-        await pulse_nonce(dut, base_nonce + idx)
-        await pulse_start(dut)
-        sent_digits = await send_pan(dut, pan)
+        await pulse_start_tt(dut)
+        sent_digits = await send_pan_tt(dut, pan)
         await RisingEdge(dut.clk)
 
-        assert int(dut.len_final.value) == len(sent_digits), f"{tid}: len_final mismatch"
-        assert int(dut.pan_ready.value) == 1, f"{tid}: pan_ready should be 1"
+        got_luhn = (int(dut.uio_out.value) >> 4) & 0x1
+        mv = (int(dut.uio_out.value) >> 6) & 0x1
+        mh = (int(dut.uio_out.value) >> 5) & 0x1
 
-        iin = int(dut.iin_prefix.value)
-        def nib(i): return (iin >> (4 * i)) & 0xF
-        for i in range(min(4, len(sent_digits))):
-            assert nib(i) == sent_digits[i], f"{tid}: prefix digit {i} mismatch"
+        b = int(dut.brand_id.value) if hasattr(dut, "brand_id") else 0
+        t = int(dut.type_id.value) if hasattr(dut, "type_id") else 0
+        iss = int(dut.issuer_id.value) if hasattr(dut, "issuer_id") else 0
 
-        got_luhn = int(dut.luhn_valid.value)
         assert got_luhn == beh["expect_luhn"], f"{tid}: luhn_valid: {got_luhn} expected: {beh['expect_luhn']}"
-
-        mv = int(dut.meta_valid.value)
-        mh = int(dut.meta_hit.value)
-        b = int(dut.brand_id.value)
-        t = int(dut.type_id.value)
-        iss = int(dut.issuer_id.value)
-
         assert mv == beh["expect_meta_valid"], f"{tid}: meta_valid: {mv} expected: {beh['expect_meta_valid']}"
         if (beh["expect_meta_hit"] is not None) and (mv == 1):
             assert mh == beh["expect_meta_hit"], f"{tid}: meta_hit: {mh} expected: {beh['expect_meta_hit']}"
@@ -147,13 +151,13 @@ async def run_dataset(dut):
 
         token_field = "-"
         if beh["expect_token"]:
-            tok64, tag16 = await wait_for_token(dut)
+            tok64 = await wait_for_token64_stream(dut)
             token_field = f"0x{tok64:016x}"
             if pan in last_token_for_pan:
                 prev = last_token_for_pan[pan]
                 assert tok64 != prev, f"{tid}: token64 did not change with different nonce"
             last_token_for_pan[pan] = tok64
         else:
-            await assert_no_token(dut)
+            await assert_no_token_stream(dut)
 
         print(f"{pan:<19} | {status:<7} | {BRAND_STR.get(b,'?'):<11} | {TYPE_STR.get(t,'?'):<8} | {ISSUER_STR.get(iss,'?'):<10} | {token_field}")

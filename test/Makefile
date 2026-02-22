@@ -12,7 +12,8 @@ PROJECT_SOURCES = pan_stream.sv \
                   iin_prefix4_classifier.sv \
                   chacha20core.sv \
                   QRfunction.sv \
-                  pan_encryptor.sv
+                  pan_encryptor.sv \
+				  tt_um_CCValidator.sv
 
 ifneq ($(GATES),yes)
 
@@ -42,7 +43,7 @@ COMPILE_ARGS 		+= -I$(SRC_DIR)
 
 # Include the testbench sources:
 VERILOG_SOURCES += $(PWD)/tb.v
-TOPLEVEL = tb
+TOPLEVEL = tt_um_CCValidator
 
 # List test modules to run, separated by commas and without the .py suffix:
 COCOTB_TEST_MODULES = test
