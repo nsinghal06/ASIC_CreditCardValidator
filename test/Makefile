@@ -12,7 +12,7 @@ PROJECT_SOURCES = pan_stream.sv \
                   iin_prefix4_classifier.sv \
                   chacha20core.sv \
                   QRfunction.sv \
-                  pan_tokenizer.sv
+                  pan_encryptor.sv
 
 ifneq ($(GATES),yes)
 

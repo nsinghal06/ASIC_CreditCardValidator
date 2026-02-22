@@ -80,7 +80,7 @@ luhn_validator luhn_u (
   );
 
   // Tokenizer (ChaCha20 + XOR)
-  pan_tokenizer tok_u (
+  pan_encryptor tok_u (
     .clk(clk),
     .rst_n(rst_n),
     .start(start),

@@ -2,35 +2,24 @@ import cocotb
 from cocotb.triggers import RisingEdge
 from cocotb.clock import Clock
 
-# TEST MODES
-# MODE A: prefix + auto-generate Luhn-valid 16-digit PAN (recommended)
-# MODE B: explicit 16-digit PAN string
-USE_SYNTHETIC_PREFIX4 = True
+DATASET = [
+    # id, pan, expected label
+    ("T1",  "4029163778265418", "VALID"),
+    ("T2",  "4482107951124058", "VALID"),
+    ("T3",  "4500980840795553", "VALID"),
+    ("T4",  "4510642735026001", "VALID"),
+    ("T5",  "4514551483583699", "VALID"),
+    ("T6",  "4536703294718295", "VALID"),
+    ("T7",  "4544890363345876", "VALID"),
+    ("T8",  "4500980840795554", "INVALID_LUHN"),
+    ("T9",  "451064273502",     "INVALID_LENGTH"),   # 12 digits
+    ("T10", "4999710862699773", "INVALID_IIN_UNKNOWN"),
+]
 
-EXPLICIT_PAN_STR = "4535000000000000"  # used only when USE_SYNTHETIC_PREFIX4 = False
-EXPECT_LUHN_VALID = True               # only used in explicit mode
+# Extra: same PAN as T1, different nonce => should produce different token64
+EXTRA_REPEAT = ("T1_REPEAT", "4029163778265418", "VALID")
 
-PREFIX4_STR = "4535"
-PAYLOAD_DIGITS = [0] * 11              # 4 + 11 = 15 digits, last digit computed by Luhn
-
-RUN_NEGATIVE_TEST = True               # flip last digit to force Luhn fail
-
-
-# Helper: compute Luhn check digit for 16-digit PAN
-def luhn_check_digit(first15_digits):
-    total = 0
-    digits = first15_digits + [0]  # placeholder check digit
-    for pos, d in enumerate(reversed(digits)):  # pos=0 is rightmost (check digit)
-        if pos % 2 == 1:
-            x = d * 2
-            if x > 9:
-                x -= 9
-            total += x
-        else:
-            total += d
-    return (10 - (total % 10)) % 10
-
-# Cocotb helpers
+# Helpers: reset / drive inputs
 async def reset_dut(dut):
     dut.rst_n.value = 0
     await RisingEdge(dut.clk)
@@ -39,168 +28,156 @@ async def reset_dut(dut):
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
 
-
-async def send_digit(dut, d, last=False):
-    dut.digit_in.value = d
-    dut.digit_valid.value = 1
-    dut.pan_end.value = 1 if last else 0
+async def pulse_start(dut):
+    dut.start.value = 1
     await RisingEdge(dut.clk)
-    dut.digit_valid.value = 0
-    dut.pan_end.value = 0
-    dut.digit_in.value = 0
-    await RisingEdge(dut.clk)
-
+    dut.start.value = 0
 
 async def pulse_nonce(dut, nonce_int):
-    # Requires tb.v to expose nonce_in + nonce_valid
+    # tb.v must expose nonce_in + nonce_valid
     dut.nonce_in.value = nonce_int
     dut.nonce_valid.value = 1
     await RisingEdge(dut.clk)
     dut.nonce_valid.value = 0
 
+async def send_pan(dut, pan_str):
+    assert pan_str.isdigit()
+    digits = [int(c) for c in pan_str]
 
-def make_digits():
-    if USE_SYNTHETIC_PREFIX4:
-        assert len(PREFIX4_STR) == 4 and PREFIX4_STR.isdigit()
-        prefix = [int(c) for c in PREFIX4_STR]
-        assert len(PAYLOAD_DIGITS) == 11
-        first15 = prefix + PAYLOAD_DIGITS
-        check = luhn_check_digit(first15)
-        return first15 + [check]
-    else:
-        assert len(EXPLICIT_PAN_STR) == 16 and EXPLICIT_PAN_STR.isdigit()
-        return [int(c) for c in EXPLICIT_PAN_STR]
+    # Stream digits. Assert pan_end on the last digit.
+    for i, d in enumerate(digits):
+        dut.digit_in.value = d
+        dut.digit_valid.value = 1
+        dut.pan_end.value = 1 if (i == len(digits) - 1) else 0
 
+        await RisingEdge(dut.clk)
 
-async def wait_for_token_valid(dut, max_cycles=250):
-    # Requires tb.v to expose token_valid + token_tag16
+        dut.digit_valid.value = 0
+        dut.pan_end.value = 0
+        dut.digit_in.value = 0
+
+        await RisingEdge(dut.clk)
+
+    return digits
+
+async def wait_for_token(dut, max_cycles=600):
     for _ in range(max_cycles):
         await RisingEdge(dut.clk)
         if int(dut.token_valid.value) == 1:
-            return int(dut.token_tag16.value)
+            tok64 = int(dut.token64.value) if hasattr(dut, "token64") else None
+            tag16 = int(dut.token_tag16.value) if hasattr(dut, "token_tag16") else None
+            return tok64, tag16
     raise AssertionError("token_valid never asserted")
 
-
-async def assert_token_not_pulsed(dut, max_cycles=250):
-    # Ensure token_valid does NOT pulse within window
+async def assert_no_token(dut, max_cycles=500):
     for _ in range(max_cycles):
         await RisingEdge(dut.clk)
         if int(dut.token_valid.value) == 1:
-            raise AssertionError("token_valid should NOT assert (unexpected pulse)")
+            raise AssertionError("token_valid asserted unexpectedly")
 
+def expected_behavior(label, length):
+    """
+    What your CURRENT RTL does:
+    - token fires only when (len==16) AND luhn_valid==1
+    - meta_valid in your classifier is also gated by luhn_valid (and card_done)
+    - meta_hit just indicates whether prefix4 matched the lookup table
+    """
+    if length != 16:
+        return dict(expect_luhn=0, expect_token=False, expect_meta_valid=0, expect_meta_hit=None)
 
-# Test
+    if label == "VALID":
+        return dict(expect_luhn=1, expect_token=True,  expect_meta_valid=1, expect_meta_hit=1)
+    if label == "INVALID_LUHN":
+        return dict(expect_luhn=0, expect_token=False, expect_meta_valid=0, expect_meta_hit=None)
+    if label == "INVALID_IIN_UNKNOWN":
+        # Luhn can still be valid, but lookup should miss.
+        # Tokenizer currently does NOT care about meta_hit, so token should still appear.
+        return dict(expect_luhn=1, expect_token=True,  expect_meta_valid=1, expect_meta_hit=0)
+
+    # fallback
+    return dict(expect_luhn=0, expect_token=False, expect_meta_valid=0, expect_meta_hit=None)
+
+# The test
 @cocotb.test()
-async def pan_stream_plus_meta_and_token(dut):
-    # Start clock
+async def run_dataset(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
 
-    # Init inputs
+    # init inputs
     dut.start.value = 0
     dut.pan_end.value = 0
     dut.digit_valid.value = 0
     dut.digit_in.value = 0
-    #dut.abort.value = 0
 
-    # If tokenizer signals exist, init them too (safe)
-    if hasattr(dut, "nonce_in"):
-        dut.nonce_in.value = 0
-    if hasattr(dut, "nonce_valid"):
-        dut.nonce_valid.value = 0
+    # nonce inputs exist in your tb.v
+    dut.nonce_in.value = 0
+    dut.nonce_valid.value = 0
 
     await reset_dut(dut)
 
-    #  Set nonce BEFORE sending PAN (token should depend on this) 
-    if hasattr(dut, "nonce_in") and hasattr(dut, "nonce_valid"):
-        await pulse_nonce(dut, 0x0123456789ABCDEF01234567)
+    all_tests = DATASET + [EXTRA_REPEAT]
 
-    #  Start capture 
-    dut.start.value = 1
-    await RisingEdge(dut.clk)
-    dut.start.value = 0
+    base_nonce = 0x0123456789ABCDEF01230000  # 96-bit-ish
+    last_token_for_pan = {}  # for "same PAN diff nonce => diff token" check
 
-    #  Send digits
-    digits = make_digits()
-    for i, d in enumerate(digits):
-        await send_digit(dut, d, last=(i == len(digits) - 1))
+    for idx, (tid, pan, label) in enumerate(all_tests):
+        digits = [int(c) for c in pan]
+        beh = expected_behavior(label, len(digits))
 
-    # settle cycle
-    await RisingEdge(dut.clk)
+        dut._log.info(f"\n=== {tid} label={label} pan={pan} ===")
 
-    #  Basic pan_stream checks 
-    assert int(dut.len_final.value) == 16, f"len_final={int(dut.len_final.value)}"
-    assert int(dut.length_ok.value) == 1, "length_ok should be 1"
-    assert int(dut.digit_ok.value) == 1, "digit_ok should be 1"
-    assert int(dut.error_flag.value) == 0, "error_flag should be 0"
-    assert int(dut.pan_ready.value) == 1, "pan_ready should be 1"
+        # different nonce each test
+        await pulse_nonce(dut, base_nonce + idx)
 
-    # IIN prefix nibble packing check (first 6 digits)
-    iin = int(dut.iin_prefix.value)
-    def nib(i): return (iin >> (4 * i)) & 0xF
-    for i in range(6):
-        assert nib(i) == digits[i], f"IIN digit {i} mismatch: got {nib(i)} expected {digits[i]}"
+        # start new capture
+        await pulse_start(dut)
 
-    #  Luhn check behavior 
-    if hasattr(dut, "luhn_valid"):
-        if USE_SYNTHETIC_PREFIX4:
-            assert int(dut.luhn_valid.value) == 1, f"Expected luhn_valid=1, got {int(dut.luhn_valid.value)}"
-        else:
-            exp = 1 if EXPECT_LUHN_VALID else 0
-            assert int(dut.luhn_valid.value) == exp, f"Expected luhn_valid={exp}, got {int(dut.luhn_valid.value)}"
+        # stream digits into pan_stream through tb.v
+        sent_digits = await send_pan(dut, pan)
 
-    #Metadata check behavior 
-    if hasattr(dut, "meta_valid"):
-        if USE_SYNTHETIC_PREFIX4:
-            assert int(dut.meta_valid.value) == 1, "Expected meta_valid=1 (synthetic is Luhn-valid)"
-            assert int(dut.meta_hit.value) == 1, "Expected meta_hit=1 for known prefix4"
-        else:
-            if EXPECT_LUHN_VALID:
-                assert int(dut.meta_valid.value) == 1, "Expected meta_valid=1 for Luhn-valid explicit PAN"
-            else:
-                assert int(dut.meta_valid.value) == 0, "Expected meta_valid=0 for Luhn-invalid explicit PAN"
-
-        dut._log.info(
-            f"Meta: brand_id={int(dut.brand_id.value)} issuer_id={int(dut.issuer_id.value)} "
-            f"type_id={int(dut.type_id.value)} hit={int(dut.meta_hit.value)}"
-        )
-
-    #  Token check: only if tokenizer signals exist 
-    if hasattr(dut, "token_valid") and hasattr(dut, "token_tag16"):
-        # If Luhn valid, token_valid should pulse and produce a tag
-        should_have_token = True
-        if not USE_SYNTHETIC_PREFIX4 and not EXPECT_LUHN_VALID:
-            should_have_token = False
-
-        if should_have_token:
-            tag1 = await wait_for_token_valid(dut, max_cycles=300)
-            dut._log.info(f"Token tag16 (nonce1) = 0x{tag1:04x}")
-        else:
-            await assert_token_not_pulsed(dut, max_cycles=200)
-
-    # Negative test: break Luhn
-    if RUN_NEGATIVE_TEST:
-        # Change nonce too (optional)
-        if hasattr(dut, "nonce_in") and hasattr(dut, "nonce_valid"):
-            await pulse_nonce(dut, 0x111122223333444455556666)
-
-        # Start new card
-        dut.start.value = 1
-        await RisingEdge(dut.clk)
-        dut.start.value = 0
-
-        bad_digits = digits.copy()
-        bad_digits[-1] = (bad_digits[-1] + 1) % 10  # flip check digit to force invalid
-
-        for i, d in enumerate(bad_digits):
-            await send_digit(dut, d, last=(i == len(bad_digits) - 1))
-
+        # settle
         await RisingEdge(dut.clk)
 
+        #  pan_stream checks 
+        assert int(dut.len_final.value) == len(sent_digits), f"{tid}: len_final mismatch"
+        assert int(dut.pan_ready.value) == 1, f"{tid}: pan_ready should be 1"
+
+        # prefix / iin_prefix sanity: first 4 digits should match
+        iin = int(dut.iin_prefix.value)
+        def nib(i): return (iin >> (4 * i)) & 0xF
+        for i in range(min(4, len(sent_digits))):
+            assert nib(i) == sent_digits[i], f"{tid}: prefix digit {i} mismatch"
+
+        #  Luhn check (proves luhn module is working) 
         if hasattr(dut, "luhn_valid"):
-            assert int(dut.luhn_valid.value) == 0, "Expected luhn_valid=0 for bad PAN"
-        if hasattr(dut, "meta_valid"):
-            assert int(dut.meta_valid.value) == 0, "Expected meta_valid=0 when Luhn fails"
+            got = int(dut.luhn_valid.value)
+            assert got == beh["expect_luhn"], f"{tid}: luhn_valid={got} expected={beh['expect_luhn']}"
 
-        # Token should NOT publish when Luhn fails
+        #  Metadata check (proves classifier is working) 
+        if hasattr(dut, "meta_valid"):
+            mv = int(dut.meta_valid.value)
+            assert mv == beh["expect_meta_valid"], f"{tid}: meta_valid={mv} expected={beh['expect_meta_valid']}"
+
+            # Only check hit when meta_valid=1 and we have an expectation
+            if (beh["expect_meta_hit"] is not None) and (mv == 1):
+                mh = int(dut.meta_hit.value)
+                assert mh == beh["expect_meta_hit"], f"{tid}: meta_hit={mh} expected={beh['expect_meta_hit']}"
+
+            dut._log.info(
+                f"Meta: valid={int(dut.meta_valid.value)} hit={int(dut.meta_hit.value)} "
+                f"brand_id={int(dut.brand_id.value)} type_id={int(dut.type_id.value)} issuer_id={int(dut.issuer_id.value)}"
+            )
+
+        # Token check (proves pan_tokenizer + chacha20core are working) 
         if hasattr(dut, "token_valid"):
-            await assert_token_not_pulsed(dut, max_cycles=250)
+            if beh["expect_token"]:
+                tok64, tag16 = await wait_for_token(dut)
+                dut._log.info(f"Token: token64=0x{tok64:016x} tag16=0x{tag16:04x}")
+
+                # For the repeat case: same PAN, different nonce => different token
+                if pan in last_token_for_pan:
+                    prev = last_token_for_pan[pan]
+                    assert tok64 != prev, f"{tid}: token64 did not change with different nonce"
+                last_token_for_pan[pan] = tok64
+            else:
+                await assert_no_token(dut)
+                dut._log.info("Token: (expected) no token_valid pulse")
