@@ -6,20 +6,7 @@ BRAND_STR = {0:"UNKNOWN", 1:"VISA", 2:"MASTERCARD", 3:"AMEX"}
 TYPE_STR  = {0:"UNKNOWN", 1:"CREDIT", 2:"DEBIT", 3:"PREPAID"}
 ISSUER_STR= {0:"UNKNOWN", 1:"TD", 2:"CIBC", 3:"RBC", 4:"DESJ", 5:"SCOTIA", 6:"LAUR"}
 
-"""
-DATASET = [
-    ("T1",  "4029163778265418", "VALID"),
-    ("T2",  "4482107951124058", "VALID"),
-    ("T3",  "4500980840795553", "VALID"),
-    ("T4",  "4510642735026001", "VALID"),
-    ("T5",  "4514551483583699", "VALID"),
-    ("T6",  "4536703294718295", "VALID"),
-    ("T7",  "4544890363345876", "VALID"),
-    ("T8",  "4500980840795554", "INVALID_LUHN"),
-    ("T9",  "451064273502",     "INVALID_LENGTH"),
-    ("T10", "4999710862699773", "INVALID_IIN_UNKNOWN"),
-]
-"""
+
 DATASET = [
     ("T1",  "4029163778265418", "VALID"),
 ]
@@ -151,6 +138,7 @@ async def run_dataset(dut):
             if dut.uio_out.value.is_resolvable:
                 break
         else:
+            dut._log.info(f"uio_out binary at timeout: {dut.uio_out.value.binstr}")
             raise AssertionError("uio_out still contains X after timeout")
 
         # Safely get binary string (may contain 'x' or 'z')
