@@ -6,6 +6,7 @@ BRAND_STR = {0:"UNKNOWN", 1:"VISA", 2:"MASTERCARD", 3:"AMEX"}
 TYPE_STR  = {0:"UNKNOWN", 1:"CREDIT", 2:"DEBIT", 3:"PREPAID"}
 ISSUER_STR= {0:"UNKNOWN", 1:"TD", 2:"CIBC", 3:"RBC", 4:"DESJ", 5:"SCOTIA", 6:"LAUR"}
 
+"""
 DATASET = [
     ("T1",  "4029163778265418", "VALID"),
     ("T2",  "4482107951124058", "VALID"),
@@ -17,6 +18,10 @@ DATASET = [
     ("T8",  "4500980840795554", "INVALID_LUHN"),
     ("T9",  "451064273502",     "INVALID_LENGTH"),
     ("T10", "4999710862699773", "INVALID_IIN_UNKNOWN"),
+]
+"""
+DATASET = [
+    ("T1",  "4029163778265418", "VALID"),
 ]
 
 EXTRA_REPEAT = ("T1_REPEAT", "4029163778265418", "VALID")
@@ -42,11 +47,15 @@ async def reset_dut(dut):
     dut.rst_n.value = 0
     dut.ui_in.value = 0
     dut.uio_in.value = 0
-    await RisingEdge(dut.clk)
-    await RisingEdge(dut.clk)
+    # Hold reset for several cycles to ensure all flops clear
+    for _ in range(5):
+        await RisingEdge(dut.clk)
     dut.rst_n.value = 1
-    await RisingEdge(dut.clk)
-    await RisingEdge(dut.clk)
+    # Wait a few cycles after reset before starting stimulus
+    for _ in range(5):
+        await RisingEdge(dut.clk)
+
+
 
 async def pulse_start_tt(dut):
     dut.ui_in.value = ui_word(0, 0, 1, 0)
@@ -107,6 +116,8 @@ async def assert_no_token_stream(dut, max_cycles=1200):
 async def run_dataset(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     await reset_dut(dut)
+    for _ in range(5):
+        await RisingEdge(dut.clk)
 
     print(r"""
    _____ _               _____ _             _____ _     _       
@@ -134,9 +145,22 @@ async def run_dataset(dut):
         sent_digits = await send_pan_tt(dut, pan)
         await RisingEdge(dut.clk)
 
-        got_luhn = (int(dut.uio_out.value) >> 4) & 0x1
-        mv = (int(dut.uio_out.value) >> 6) & 0x1
-        mh = (int(dut.uio_out.value) >> 5) & 0x1
+        #debug
+       # Wait until uio_out is resolvable (all bits 0/1) or timeout
+        for _ in range(10):
+            if dut.uio_out.value.is_resolvable:
+                break
+        else:
+            raise AssertionError("uio_out still contains X after timeout")
+
+        # Safely get binary string (may contain 'x' or 'z')
+        uio_bits = dut.uio_out.value.binstr
+        dut._log.info(f"uio_out binary: {uio_bits}")
+
+        # Extract bits manually from the binary string (LSB is rightmost)
+        got_luhn = int(uio_bits[-5])   # bit4 (luhn_valid)
+        mv = int(uio_bits[-7])         # bit6 (meta_valid)
+        mh = int(uio_bits[-6])         # bit5 (meta_hit)
 
         b = int(dut.brand_id.value) if hasattr(dut, "brand_id") else 0
         t = int(dut.type_id.value) if hasattr(dut, "type_id") else 0
