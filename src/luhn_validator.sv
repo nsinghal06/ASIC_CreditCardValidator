@@ -5,19 +5,15 @@
 
 module luhn_validator (
     input  logic        pan_ready,
-    input  logic [75:0]  pan_bcd,   // digit0 at [3:0] (leftmost) ... digit15 at [63:60] (rightmost/check)
-    output logic         valid
+    input  logic [75:0] pan_bcd,   // digit0 at [3:0] (leftmost) ... digit15 at [63:60] (rightmost/check)
+    output logic        valid
 );
 
-    // Internally keep the same digit convention your teammate used:
+    // Internally keep the same digit convention:
     // digit[0] is rightmost (check digit), digit[15] is leftmost
     logic [3:0] digit [15:0];
-
-    // Processed digit values after doubling and digit sum
     logic [3:0] processed [15:0];
-
-    // Total sum (needs enough bits; max is 16*9=144)
-    logic [8:0] total_sum;
+    logic [8:0] total_sum;          // 9 bits are enough: max sum = 16*9 = 144 (< 2^9)
 
     integer i;
 
@@ -107,11 +103,13 @@ module luhn_validator (
             processed[15] = (digit[15] << 1) - 4'd9;
         end
 
-        // Calculate total sum
-        total_sum = processed[0] + processed[1] + processed[2] + processed[3] +
-                    processed[4] + processed[5] + processed[6] + processed[7] +
-                    processed[8] + processed[9] + processed[10] + processed[11] +
-                    processed[12] + processed[13] + processed[14] + processed[15];
+        // ---------- FIXED SUM CALCULATION ----------
+        total_sum = 9'd0;
+        for (i = 0; i < 16; i = i + 1) begin
+            // Zero‑extend each 4‑bit processed digit to 9 bits before adding
+            total_sum = total_sum + {5'd0, processed[i]};
+        end
+        // -------------------------------------------
 
         // Valid if sum modulo 10 equals 0, and only meaningful once PAN capture is done
         valid = pan_ready && ((total_sum % 9'd10) == 9'd0);

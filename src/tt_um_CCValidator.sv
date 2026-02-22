@@ -137,21 +137,14 @@ module tt_um_CCValidator (
   assign uo_out = stream_active ? token_byte : 8'h00;
 
   assign uio_oe  = 8'hFF;
-  wire token_busy_2   = ((token_busy   === 1'b1) || (stream_active === 1'b1));
-    wire meta_valid_2   =  (meta_valid   === 1'b1);
-    wire meta_hit_2     =  (meta_hit     === 1'b1);
-    wire luhn_valid_2   =  (luhn_valid   === 1'b1);
-    wire stream_active_2=  (stream_active=== 1'b1);
-
-    // Force known outputs during reset
-    assign uio_out = (!rst_n) ? 8'h00 : {
-    token_busy_2,
-    meta_valid_2,
-    meta_hit_2,
-    luhn_valid_2,
-    stream_active_2,
-    byte_idx
-    };
+  assign uio_out = (!rst_n) ? 8'h00 : {
+    token_busy,      // directly from pan_encryptor
+    meta_valid,      // directly from classifier
+    meta_hit,        // directly from classifier
+    luhn_valid,      // directly from luhn_validator
+    stream_active,   // from the always_ff block
+    byte_idx         // from the always_ff block
+};
   wire _unused = &{ui_in[7], uio_in[7:0], ena, brand_id, issuer_id, type_id, token_tag16, 1'b0};
 
 endmodule
