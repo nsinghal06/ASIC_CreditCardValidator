@@ -6,6 +6,8 @@ module tb;
   reg clk = 0;
   reg rst_n = 0;
 
+  
+
   reg start = 0;
   reg pan_end = 0;
   reg digit_valid = 0;
