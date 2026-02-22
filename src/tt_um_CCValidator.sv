@@ -6,44 +6,146 @@
 `default_nettype none
 
 module tt_um_CCValidator (
-    input  wire [7:0] ui_in,    // Dedicated inputs
-    output wire [7:0] uo_out,   // Dedicated outputs
-    input  wire [7:0] uio_in,   // IOs: Input path
-    output wire [7:0] uio_out,  // IOs: Output path
-    output wire [7:0] uio_oe,   // IOs: Enable path (active high: 0=input, 1=output)
-    input  wire       ena,      // always 1 when the design is powered, so you can ignore it
-    input  wire       clk,      // clock
-    input  wire       rst_n     // reset_n - low to reset
+    input  wire [7:0] ui_in,
+    output wire [7:0] uo_out,
+    input  wire [7:0] uio_in,
+    output wire [7:0] uio_out,
+    output wire [7:0] uio_oe,
+    input  wire       ena,
+    input  wire       clk,
+    input  wire       rst_n
 );
 
-  // All output pins must be assigned. If not used, assign to 0.
-  wire rst;
-  wire [9:0] clk_per_bit;
+  wire [3:0] digit_in    = ui_in[3:0];
+  wire       digit_valid = ui_in[4];
+  wire       start       = ui_in[5];
+  wire       pan_end     = ui_in[6];
 
-  assign clk_per_bit = {uio_in[7:0], 2'b00}; // set upper 8 bits
-  
-  
-  assign rst = ~rst_n;
-  assign uio_oe = 8'b0000_0000; // set bidirectional as inputs
-  assign uio_out = 8'b0000_0000; // set unused bidirectional outputs to LOW
-  assign uo_out[7:3] = 5'b0_0000; // set unused outputs to LOW
+  wire [75:0] pan_bcd;
+  wire        pan_ready;
+  wire        card_done;
+  wire [4:0]  len_final;
+  wire [31:0] iin_prefix;
 
-  simproc_system #(
-     .CLK_BITS(10)
-  ) U1 (
-      .clk(clk),
-      .rst(rst),
-
-      .clk_per_bit(clk_per_bit),
-      .uart_rx(ui_in[0]),
-
-      .uart_tx(uo_out[0]),
-
-      .halt(uo_out[1]),
-      .done(uo_out[2])
+  pan_stream u_stream (
+    .clk      (clk),
+    .rst_n    (rst_n),
+    .start    (start),
+    .pan_end  (pan_end),
+    .digit_valid(digit_valid),
+    .digit_in (digit_in),
+    .pan_bcd  (pan_bcd),
+    .pan_ready(pan_ready),
+    .card_done(card_done),
+    .len_final(len_final),
+    .iin_prefix(iin_prefix)
   );
 
-  // List all unused inputs to prevent warnings
-  wire _unused = &{ui_in[7:1], ena, 1'b0};
+  
+
+    wire luhn_valid_raw;
+    luhn_validator u_luhn (
+    .pan_ready(pan_ready),
+    .pan_bcd(pan_bcd),
+    .valid(luhn_valid_raw)
+    );
+
+  wire luhn_valid = (len_final == 5'd16) ? luhn_valid_raw : 1'b0;
+
+  wire [15:0] prefix4_bcd = iin_prefix[15:0];
+
+  wire [2:0] brand_id;
+  wire [4:0] issuer_id;
+  wire [1:0] type_id;
+  wire meta_hit, meta_valid;
+
+  iin_prefix4_classifier u_meta (
+    .clk        (clk),
+    .rst_n      (rst_n),
+    .start      (start),
+    .card_done  (card_done),
+    .luhn_valid (luhn_valid),
+    .prefix4_bcd(prefix4_bcd),
+    .brand_id   (brand_id),
+    .issuer_id  (issuer_id),
+    .type_id    (type_id),
+    .meta_hit   (meta_hit),
+    .meta_valid (meta_valid)
+  );
+
+  reg [95:0] nonce_ctr;
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) nonce_ctr <= 96'd0;
+    else if (start) nonce_ctr <= nonce_ctr + 96'd1;
+  end
+  wire [95:0] nonce_in    = nonce_ctr;
+  wire        nonce_valid = start;
+
+  wire [63:0] token64;
+  wire [15:0] token_tag16;
+  wire        token_valid;
+  wire        token_busy;
+
+  pan_encryptor u_tok (
+    .clk        (clk),
+    .rst_n      (rst_n),
+    .start      (start),
+    .card_done  (card_done),
+    .pan_ready  (pan_ready),
+    .luhn_valid (luhn_valid),
+    .len_final  (len_final),
+    .pan_bcd    (pan_bcd),
+    .nonce_in   (nonce_in),
+    .nonce_valid(nonce_valid),
+    .token64    (token64),
+    .token_tag16(token_tag16),
+    .token_valid(token_valid),
+    .token_busy (token_busy)
+  );
+
+  reg  [63:0] token_latched;
+  reg  [2:0]  byte_idx;
+  reg         stream_active;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      token_latched <= 64'd0;
+      byte_idx      <= 3'd0;
+      stream_active <= 1'b0;
+    end else begin
+      if (start) begin
+        byte_idx      <= 3'd0;
+        stream_active <= 1'b0;
+      end else if (!stream_active && token_valid) begin
+        token_latched <= token64;
+        byte_idx      <= 3'd0;
+        stream_active <= 1'b1;
+      end else if (stream_active) begin
+        if (byte_idx == 3'd7) begin
+          stream_active <= 1'b0;
+        end else begin
+          byte_idx <= byte_idx + 3'd1;
+        end
+      end
+    end
+  end
+
+  wire [7:0] token_byte = token_latched[8*byte_idx +: 8];
+
+  assign uo_out = stream_active ? token_byte : 8'h00;
+
+  assign uio_oe  = 8'hFF;
+  assign uio_out = {
+    (token_busy | stream_active),
+    meta_valid,
+    meta_hit,
+    luhn_valid,
+    stream_active,
+    byte_idx
+  };
+
+  wire _unused = &{ui_in[7], uio_in[7:0], ena, brand_id, issuer_id, type_id, token_tag16, 1'b0};
 
 endmodule
+
+`default_nettype wire
